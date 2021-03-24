@@ -1,0 +1,8 @@
+= Ansible Tower Demo
+This is a pre-canned demo for an existing tower installation. You need AWX CLI and the associated configurations for it, plus the tower_cli.cfg file for login. See https://galaxy.ansible.com/awx/awx for details on setup.
+
+== Requirements
+* vault.yml filling in the variables in the vault-template.yml
+* users.yml based on users-template.yml
+* The playbooks here: https://github.com/CorwinBurton/tower-demos.git
+* Working Tower or AWX install

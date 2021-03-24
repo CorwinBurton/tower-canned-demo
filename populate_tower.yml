@@ -1,0 +1,350 @@
+---
+- name: Populate Tower Objects
+  hosts: localhost
+  gather_facts: false
+
+  vars_files:
+    - files/vault.yml
+    - files/users.yml
+
+  vars:
+    my_project: "Tower Demos"
+    my_inventory_project: "Git Inventory Project"
+    my_machine_creds: "RHEL Password"
+    my_machine_key_creds: "RHEL SSH"
+    my_inventory: "Git Inventory"
+    my_subscription_creds: "Subscription Creds"
+    my_git_creds: "GitHub SSH"
+    my_scm_demo_url: "{{ vault_scm_demo_url }}"
+    my_scm_inventory_url: "{{ vault_scm_inventory_url }}"
+    my_mssql_password: "{{ vault_mssql_password }}"
+    my_default_user: "{{ vault_default_user }}"
+    my_default_password: "{{ vault_default_password }}"
+    my_rh_password: "{{ vault_rh_password }}"
+    my_rh_username: "{{ vault_rh_username }}"
+    my_pool_id: "{{ vault_pool_id }}"
+    
+    tower_key: "{{ vault_tower_key }}"
+    tower_pubkey: "{{ vault_tower_pubkey }}"
+
+# test vars
+    my_inventory_file: "inventory.yml"
+
+# demo vars
+#    my_inventory_file: "demo-inventory.yml"
+
+    
+  tasks:
+  # Credentials Setup
+    - name: Credentials Setup
+      block:
+        - name: Create RH Access Portal Credential Type
+          awx.awx.tower_credential_type:
+            name: RH Access Portal
+            description: Credentials for RH Access
+            kind: cloud
+            inputs: "{{ lookup('file', 'files/rh_access_portal_input.json') }}"
+            injectors: "{{ lookup('file', 'files/rh_access_portal_injector.json') }}"
+            state: present
+
+        - name: Add Subscription Creds
+          awx.awx.tower_credential:
+            name: "{{ my_subscription_creds }}"
+            description: RH Access Portal Credentials
+            organization: "Default"
+            state: present
+            credential_type: "RH Access Portal"
+            inputs:
+              password: "{{ my_rh_password }}"
+              pool_id: "{{ my_pool_id }}"
+              username: "{{ my_rh_username }}"
+
+        - name: Add Git Credentials
+          awx.awx.tower_credential:
+            name: "{{ my_git_creds }}"
+            description: SSH Key for Git access
+            organization: "Default"
+            state: present
+            credential_type: "Source Control"
+            inputs:
+              username: git
+              ssh_key_data: "{{ tower_key }}"
+
+        - name: Add RHEL Password
+          awx.awx.tower_credential:
+            name: "{{ my_machine_creds }}"
+            description: Password for RHEL host access
+            organization: "Default"
+            state: present
+            credential_type: "Machine"
+            inputs:
+              username: "{{ my_default_user }}"
+              password: "{{ my_default_password }}" 
+              become_password: "{{ my_default_password }}"
+        
+        - name: Add RHEL SSH Key
+          awx.awx.tower_credential:
+            name: "{{ my_machine_key_creds }}"
+            description: SSH Key for RHEL host access
+            organization: "Default"
+            state: present
+            credential_type: "Machine"
+            inputs:
+              username: ansible
+              ssh_key_data: "{{ tower_key }}"
+      tags:
+        - creds
+
+  # Projects Setup  
+    - name: Check Projects
+      block:
+        - name: check main project
+          awx.awx.tower_project:
+            name: "{{ my_project }}"
+            organization: "Default"
+            state: present
+            scm_type: git
+            scm_credential: "{{ my_git_creds }}"
+            scm_url: "{{ my_scm_demo_url }}"
+            scm_clean: yes
+            scm_delete_on_update: yes
+            scm_update_on_launch: yes
+            scm_update_cache_timeout: 0
+
+        - name: check inventory project
+          awx.awx.tower_project:
+            name: "{{ my_inventory_project }}"
+            organization: "Default"
+            state: present
+            scm_type: git
+            scm_credential: "{{ my_git_creds }}"
+            scm_url: "{{ my_scm_inventory_url }}"
+            scm_clean: yes
+            scm_delete_on_update: yes
+            scm_update_on_launch: yes
+            scm_update_cache_timeout: 0
+      tags:
+        - projects
+
+    - name: Check Inventory
+      block:
+        - name: check main inventory
+          awx.awx.tower_inventory:
+            name: "{{ my_inventory }}"
+            organization: "Default"
+            state: present
+
+        - name: check inventory source from git
+          awx.awx.tower_inventory_source:
+              name: "{{ my_inventory }}"
+              inventory: "{{ my_inventory }}"
+              source: scm
+              source_project: "{{ my_inventory_project }}"
+              source_path: "{{ my_inventory_file }}"
+              update_on_project_update: yes
+              overwrite: yes
+              overwrite_vars: yes
+              state: present
+
+      tags:
+        - inventory
+
+  # Job Templates Setup
+    - name: Job Template Setup
+      block:
+        - name: Create RHEL8 Raw Setup job template
+          awx.awx.tower_job_template:
+            name: "01 RHEL Raw Setup"
+            job_type: "run"
+            organization: "Default"
+            inventory: "{{ my_inventory }}"
+            project: "{{ my_project }}"
+            playbook: "playbooks/rh-raw-setup.yml"
+            job_tags: user-setup
+            extra_vars:
+              python_version: python36
+              ansible_username: ansible
+              ssh_pub_key: "{{ tower_pubkey }}"
+            credentials:
+              - "{{ my_machine_creds }}"
+            state: present
+            become_enabled: yes
+
+        - name: Create SSH Hardening job template
+          awx.awx.tower_job_template:
+            name: "02 SSH Hardening"
+            job_type: "run"
+            organization: "Default"
+            inventory: "{{ my_inventory }}"
+            project: "{{ my_project }}"
+            playbook: "playbooks/ssh-hardening.yml"
+            credentials:
+              - "{{ my_machine_key_creds }}"
+            state: present
+            become_enabled: yes
+
+        - name: Create Attach Hosts job template
+          awx.awx.tower_job_template:
+            name: "03 Attach RHEL"
+            job_type: "run"
+            organization: "Default"
+            inventory: "{{ my_inventory }}"
+            project: "{{ my_project }}"
+            playbook: "playbooks/rhn-attach.yml"
+            credentials:
+              - "{{ my_machine_key_creds }}"
+              - "{{ my_subscription_creds }}"
+            state: present
+            become_enabled: yes
+
+        - name: Create Deploy HTTPD job template
+          awx.awx.tower_job_template:
+            name: "04 Deploy HTTPD"
+            job_type: "run"
+            organization: "Default"
+            inventory: "{{ my_inventory }}"
+            project: "{{ my_project }}"
+            playbook: "playbooks/rh-deploy-httpd-role.yml"
+            limit: web
+            credentials:
+              - "{{ my_machine_key_creds }}"
+            state: present
+            become_enabled: yes
+
+        - name: Create Install MSSQL job template
+          awx.awx.tower_job_template:
+            name: "05 Deploy MSSQL"
+            job_type: "run"
+            organization: "Default"
+            inventory: "{{ my_inventory }}"
+            project: "{{ my_project }}"
+            playbook: "playbooks/rh-install-mssql.yml"
+            limit: db
+            extra_vars:
+              mssql_db_password: "{{ my_mssql_password }}"
+            credentials:
+              - "{{ my_machine_key_creds }}"
+            state: present
+            become_enabled: yes
+            
+        - name: Create Detach Hosts job template
+          awx.awx.tower_job_template:
+            name: "06 Detach RHEL"
+            job_type: "run"
+            organization: "Default"
+            inventory: "{{ my_inventory }}"
+            project: "{{ my_project }}"
+            playbook: "playbooks/rhn-detach.yml"
+            credentials:
+              - "{{ my_machine_key_creds }}"
+              - "{{ my_subscription_creds }}"
+            state: present
+            become_enabled: yes
+      
+      tags: jobs        
+
+  # Workflow setup
+    - name: Check Workflow
+      block:
+        - name: check workflow
+          awx.awx.tower_workflow_job_template:
+            name: "00 RHEL Pipeline"
+            organization: "Default"
+            state: present
+
+        - name: MSSQL Node
+          awx.awx.tower_workflow_job_template_node:
+            identifier: mssql-install
+            workflow: "00 RHEL Pipeline"
+            organization: "Default"
+            state: present
+            unified_job_template: "05 Deploy MSSQL"
+
+        - name: HTTPD Node
+          awx.awx.tower_workflow_job_template_node:
+            identifier: httpd-install
+            workflow: "00 RHEL Pipeline"
+            organization: "Default"
+            state: present
+            unified_job_template: "04 Deploy HTTPD"
+
+        - name: Attach Node
+          awx.awx.tower_workflow_job_template_node:
+            identifier: rhel-attach
+            workflow: "00 RHEL Pipeline"
+            organization: "Default"
+            state: present
+            unified_job_template: "03 Attach RHEL"
+            success_nodes:
+              - httpd-install
+              - mssql-install
+
+        - name: SSH Hardening Node
+          awx.awx.tower_workflow_job_template_node:
+            identifier: ssh-hardening
+            workflow: "00 RHEL Pipeline"
+            organization: "Default"
+            state: present
+            unified_job_template: "02 SSH Hardening"
+            success_nodes:
+              - rhel-attach     
+
+        - name: Inventory update node
+          awx.awx.tower_workflow_job_template_node:
+            identifier: inventory-update
+            workflow: "00 RHEL Pipeline"
+            organization: "Default"
+            state: present
+            unified_job_template: "{{ my_inventory_project }}"
+            success_nodes:
+              - ssh-hardening
+
+        - name: Project update node
+          awx.awx.tower_workflow_job_template_node:
+            identifier: project-update
+            workflow: "00 RHEL Pipeline"
+            organization: "Default"
+            state: present
+            unified_job_template: "{{ my_project }}"
+            success_nodes:
+              - inventory-update
+        
+      tags:
+        - workflow
+
+  # RBAC setup
+    - name: Set up Teams and Users
+      block: 
+
+        - name: Create Jr Ops team
+          awx.awx.tower_team:
+            name: "Jr Ops"
+            description: "Junior Operations"
+            organization: "Default"
+            state: present
+        
+        - name: Create users
+          awx.awx.tower_user:
+            username: "{{ item.username }}"
+            password: "{{ item.password }}"
+            email: "{{ item.email }}"
+            first_name: "{{ item.firstname }}"
+            last_name: "{{ item.lastname }}"
+            state: present
+          loop: "{{ users }}"
+        
+        - name: Add users to "Jr Ops"
+          awx.awx.tower_role:
+            role: member
+            user: "{{ item.username }}"
+            target_team: "Jr Ops"
+          loop: "{{ users }}"
+        
+        - name: Add team to org role execute
+          awx.awx.tower_role:
+            role: execute
+            organization: "Default"
+            team: "Jr Ops"
+      
+      tags:
+        - rbac

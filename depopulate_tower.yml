@@ -1,0 +1,111 @@
+---
+- name: Depopulate Tower Objects
+  hosts: localhost
+  gather_facts: false
+
+  vars_files:
+    - files/users.yml
+
+  vars:
+      my_project: "Tower Demos"
+      my_inventory_project: "Git Inventory Project"
+      my_machine_creds: "RHEL Password"
+      my_machine_key_creds: "RHEL SSH"
+      my_inventory: "Git Inventory"
+      my_subscription_creds: "Subscription Creds"
+      my_git_creds: "GitHub SSH"
+      #change between demos
+
+  tasks:
+
+  # delete workflow
+    - name: Remove workflow template
+      awx.awx.tower_workflow_job_template:
+        name: "00 RHEL Pipeline"
+        organization: "Default"
+        state: absent
+
+  # delete job templates
+    - name: Remove job templates
+      awx.awx.tower_job_template:
+        name: "{{ item }}"
+        state: absent
+      loop:
+        - "01 RHEL Raw Setup"
+        - "02 SSH Hardening"
+        - "03 Attach RHEL"
+        - "04 Deploy HTTPD"
+        - "05 Deploy MSSQL"
+        - "06 Detach RHEL"
+
+  # delete inventory
+    - name: Remove main inventory
+      awx.awx.tower_inventory:
+        name: "{{ my_inventory }}"
+        organization: "Default"
+        state: absent
+
+  # delete projects
+    - name: Remove inventory project
+      awx.awx.tower_project:
+        name: "{{ my_inventory_project }}"
+        organization: "Default"
+        state: absent
+
+    - name: Remove main project
+      awx.awx.tower_project:
+        name: "{{ my_project }}"
+        organization: "Default"
+        state: absent
+
+  # delete credentials
+    - name: Remove RH credentials
+      awx.awx.tower_credential:  
+        name: "{{ my_subscription_creds }}"
+        organization: "Default"
+        credential_type: "RH Access Portal"
+        state: absent
+      ignore_errors: yes
+
+    - name: Remove git credentials
+      awx.awx.tower_credential:  
+        name: "{{ my_git_creds }}"
+        organization: "Default"
+        credential_type: "Source Control"
+        state: absent
+
+    - name: Remove pw credentials
+      awx.awx.tower_credential:  
+        name: "{{ my_machine_creds }}"
+        organization: "Default"
+        credential_type: "Machine"
+        state: absent
+
+    - name: Remove ssh credentials
+      awx.awx.tower_credential:  
+        name: "{{ my_machine_key_creds }}"
+        organization: "Default"
+        credential_type: "Machine"
+        state: absent
+
+  # delete custom credentials type      
+    - name: Remove RH Access Portal Credential Type
+      awx.awx.tower_credential_type:
+        name: RH Access Portal
+        kind: cloud
+        state: absent
+  
+  # delete users and teams
+    - name: Remove users
+      awx.awx.tower_user:
+        username: "{{ item.username }}"
+        state: absent
+      loop: "{{ users }}"
+
+    - name: Remove Jr Ops team
+      awx.awx.tower_team:
+        name: "Jr Ops"
+        description: "Junior Operations"
+        organization: "Default"
+        state: absent
+    
