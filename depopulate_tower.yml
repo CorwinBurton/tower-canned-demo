@@ -3,6 +3,9 @@
   hosts: localhost
   gather_facts: false
 
+  collections:
+    - ansible.tower
+
   vars_files:
     - files/users.yml
 
@@ -20,14 +23,14 @@
 
   # delete workflow
     - name: Remove workflow template
-      awx.awx.tower_workflow_job_template:
+      tower_workflow_job_template:
         name: "00 RHEL Pipeline"
         organization: "Default"
         state: absent
 
   # delete job templates
     - name: Remove job templates
-      awx.awx.tower_job_template:
+      tower_job_template:
         name: "{{ item }}"
         state: absent
       loop:
@@ -40,27 +43,27 @@
 
   # delete inventory
     - name: Remove main inventory
-      awx.awx.tower_inventory:
+      tower_inventory:
         name: "{{ my_inventory }}"
         organization: "Default"
         state: absent
 
   # delete projects
     - name: Remove inventory project
-      awx.awx.tower_project:
+      tower_project:
         name: "{{ my_inventory_project }}"
         organization: "Default"
         state: absent
 
     - name: Remove main project
-      awx.awx.tower_project:
+      tower_project:
         name: "{{ my_project }}"
         organization: "Default"
         state: absent
 
   # delete credentials
     - name: Remove RH credentials
-      awx.awx.tower_credential:  
+      tower_credential:  
         name: "{{ my_subscription_creds }}"
         organization: "Default"
         credential_type: "RH Access Portal"
@@ -68,21 +71,21 @@
       ignore_errors: yes
 
     - name: Remove git credentials
-      awx.awx.tower_credential:  
+      tower_credential:  
         name: "{{ my_git_creds }}"
         organization: "Default"
         credential_type: "Source Control"
         state: absent
 
     - name: Remove pw credentials
-      awx.awx.tower_credential:  
+      tower_credential:  
         name: "{{ my_machine_creds }}"
         organization: "Default"
         credential_type: "Machine"
         state: absent
 
     - name: Remove ssh credentials
-      awx.awx.tower_credential:  
+      tower_credential:  
         name: "{{ my_machine_key_creds }}"
         organization: "Default"
         credential_type: "Machine"
@@ -90,20 +93,20 @@
 
   # delete custom credentials type      
     - name: Remove RH Access Portal Credential Type
-      awx.awx.tower_credential_type:
+      tower_credential_type:
         name: RH Access Portal
         kind: cloud
         state: absent
   
   # delete users and teams
     - name: Remove users
-      awx.awx.tower_user:
+      tower_user:
         username: "{{ item.username }}"
         state: absent
       loop: "{{ users }}"
 
     - name: Remove Jr Ops team
-      awx.awx.tower_team:
+      tower_team:
         name: "Jr Ops"
         description: "Junior Operations"
         organization: "Default"
