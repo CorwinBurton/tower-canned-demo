@@ -15,7 +15,7 @@
     my_inventory_project: "Git Inventory Project"
     my_machine_creds: "RHEL Password"
     my_machine_key_creds: "RHEL SSH"
-    my_inventory: "Git Inventory"
+    my_inventory: "{{ vault_inventory }}"
     my_subscription_creds: "Subscription Creds"
     my_git_creds: "GitHub SSH"
     my_scm_demo_url: "{{ vault_scm_demo_url }}"
