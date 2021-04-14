@@ -1,0 +1,23 @@
+# names
+project: "Tower Demos"
+my_inventory_project: "Git Inventory Project"
+machine_creds: "RHEL Password"
+machine_key_creds: "RHEL SSH"
+git_creds: "GitHub SSH"
+satellite_creds: "Satellite Login"
+subscription_creds: "Subscription Creds"
+
+# vault vars
+# machine_default_user:
+# machine_default_password:
+# rh_password:
+# rh_username:
+# rh_pool_id:
+# tower_key:
+# tower_pubkey:
+# scm_demo_url:
+# scm_inventory_url:
+# mssql_password:
+# sat_url:
+# sat_username:
+# sat_password:

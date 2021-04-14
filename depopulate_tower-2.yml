@@ -1,0 +1,82 @@
+---
+- name: Depopulate Tower Objects
+  hosts: localhost
+  gather_facts: false
+
+  collections:
+    - ansible.tower
+
+  vars_files:
+    - files/vars.yml
+    - files/users.yml
+
+  vars:
+      my_project: "Tower Demos"
+      my_inventory_project: "Git Inventory Project"
+      my_machine_creds: "RHEL Password"
+      my_machine_key_creds: "RHEL SSH"
+      my_inventory: "Git Inventory"
+      my_subscription_creds: "Subscription Creds"
+      my_git_creds: "GitHub SSH"
+      #change between demos
+
+  tasks:
+
+  # delete workflow
+    - name: Remove workflow template
+      tower_workflow_job_template:
+        name: "00 RHEL Pipeline"
+        organization: "Default"
+        state: absent
+
+  # delete job templates
+    - name: Remove job templates
+      tower_job_template:
+        name: "{{ item }}"
+        state: absent
+      loop:
+        - "01 RHEL Raw Setup"
+        - "02 SSH Hardening"
+        - "03 Attach RHEL"
+        - "04 Deploy HTTPD"
+        - "05 Deploy MSSQL"
+        - "06 Detach RHEL"
+
+  # delete inventory
+    - name: Remove main inventory
+      tower_inventory:
+        name: "{{ my_inventory }}"
+        organization: "Default"
+        state: absent
+
+  # delete projects
+    - name: Remove main project
+      tower_project:
+        name: "{{ my_project }}"
+        organization: "Default"
+        state: absent
+
+  # delete credentials
+    - name: Remove credentials
+      tower_credential:  
+        name: "{{ item.name }}"
+        organization: "Default"
+        credential_type: "{{ item.type }}"
+        state: absent
+      loop:
+        - "{ name: '', type: '' }"
+ 
+  # delete users and teams
+    - name: Remove users
+      tower_user:
+        username: "{{ item.username }}"
+        state: absent
+      loop: "{{ users }}"
+
+    - name: Remove Jr Ops team
+      tower_team:
+        name: "Jr Ops"
+        description: "Junior Operations"
+        organization: "Default"
+        state: absent
+    

@@ -10,37 +10,14 @@
     - files/vars.yml
     - files/vault.yml
     - files/users.yml
-
+  
   vars:
-    inventory: "Git Inventory"
-    inventory_file: "inventory.yml"
-
-    
+    inventory: "Satellite"
+   
   tasks:
   # Credentials Setup
     - name: Credentials Setup
       block:
-        - name: Create RH Access Portal Credential Type
-          tower_credential_type:
-            name: RH Access Portal
-            description: Credentials for RH Access
-            kind: cloud
-            inputs: "{{ lookup('file', 'files/rh_access_portal_input.json') }}"
-            injectors: "{{ lookup('file', 'files/rh_access_portal_injector.json') }}"
-            state: present
-
-        - name: Add Subscription Creds
-          tower_credential:
-            name: "{{ subscription_creds }}"
-            description: RH Access Portal Credentials
-            organization: "Default"
-            state: present
-            credential_type: "RH Access Portal"
-            inputs:
-              password: "{{ rh_password }}"
-              pool_id: "{{ rh_pool_id }}"
-              username: "{{ rh_username }}"
-
         - name: Add Git Credentials
           tower_credential:
             name: "{{ git_creds }}"
@@ -51,6 +28,18 @@
             inputs:
               username: git
               ssh_key_data: "{{ tower_key }}"
+        
+        - name: Add Satellite Credentials
+          tower_credential:
+            name: "{{ satellite_creds }}"
+            description: "Satellite Login Credentials"
+            organization: "Default"
+            state: present
+            credential_type: "Red Hat Satellite 6"
+            inputs:
+              url: "{{ sat_url }}"
+              username: "{{ sat_username }}"
+              password: "{{ sat_password }}"
 
         - name: Add RHEL Password
           tower_credential:
@@ -93,21 +82,10 @@
             scm_update_on_launch: yes
             scm_update_cache_timeout: 0
 
-        - name: check inventory project
-          tower_project:
-            name: "{{ inventory_project }}"
-            organization: "Default"
-            state: present
-            scm_type: git
-            scm_credential: "{{ git_creds }}"
-            scm_url: "{{ scm_inventory_url }}"
-            scm_clean: yes
-            scm_delete_on_update: yes
-            scm_update_on_launch: yes
-            scm_update_cache_timeout: 0
       tags:
         - projects
 
+  # Inventory Setup
     - name: Check Inventory
       block:
         - name: check main inventory
@@ -116,14 +94,13 @@
             organization: "Default"
             state: present
 
-        - name: check inventory source from git
+        - name: check inventory source from Satellite
           tower_inventory_source:
-              name: "{{ inventory }}"
+              name: "Satellite Source"
               inventory: "{{ inventory }}"
-              source: scm
-              source_project: "{{ inventory_project }}"
-              source_path: "{{ inventory_file }}"
-              update_on_project_update: yes
+              source: satellite6
+              credential: "{{ satellite_creds }}"
+              update_on_launch: yes
               overwrite: yes
               overwrite_vars: yes
               state: present
@@ -165,20 +142,6 @@
             state: present
             become_enabled: yes
 
-        - name: Create Attach Hosts job template
-          tower_job_template:
-            name: "03 Attach RHEL"
-            job_type: "run"
-            organization: "Default"
-            inventory: "{{ inventory }}"
-            project: "{{ project }}"
-            playbook: "playbooks/rhn-attach.yml"
-            credentials:
-              - "{{ machine_key_creds }}"
-              - "{{ subscription_creds }}"
-            state: present
-            become_enabled: yes
-
         - name: Create Deploy HTTPD job template
           tower_job_template:
             name: "04 Deploy HTTPD"
@@ -206,20 +169,6 @@
               mssql_db_password: "{{ mssql_password }}"
             credentials:
               - "{{ machine_key_creds }}"
-            state: present
-            become_enabled: yes
-            
-        - name: Create Detach Hosts job template
-          tower_job_template:
-            name: "06 Detach RHEL"
-            job_type: "run"
-            organization: "Default"
-            inventory: "{{ inventory }}"
-            project: "{{ project }}"
-            playbook: "playbooks/rhn-detach.yml"
-            credentials:
-              - "{{ machine_key_creds }}"
-              - "{{ subscription_creds }}"
             state: present
             become_enabled: yes
       
@@ -250,17 +199,6 @@
             state: present
             unified_job_template: "04 Deploy HTTPD"
 
-        - name: Attach Node
-          tower_workflow_job_template_node:
-            identifier: rhel-attach
-            workflow: "00 RHEL Pipeline"
-            organization: "Default"
-            state: present
-            unified_job_template: "03 Attach RHEL"
-            success_nodes:
-              - httpd-install
-              - mssql-install
-
         - name: SSH Hardening Node
           tower_workflow_job_template_node:
             identifier: ssh-hardening
@@ -269,17 +207,8 @@
             state: present
             unified_job_template: "02 SSH Hardening"
             success_nodes:
-              - rhel-attach     
-
-        - name: Inventory update node
-          tower_workflow_job_template_node:
-            identifier: inventory-update
-            workflow: "00 RHEL Pipeline"
-            organization: "Default"
-            state: present
-            unified_job_template: "{{ inventory_project }}"
-            success_nodes:
-              - ssh-hardening
+              - httpd-install
+              - mssql-install   
 
         - name: Project update node
           tower_workflow_job_template_node:
@@ -289,7 +218,7 @@
             state: present
             unified_job_template: "{{ project }}"
             success_nodes:
-              - inventory-update
+              - ssh-hardening
         
       tags:
         - workflow
