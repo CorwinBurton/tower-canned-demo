@@ -119,6 +119,7 @@
             job_type: "run"
             organization: "Default"
             inventory: "{{ inventory }}"
+            limit: foreman_virthosts
             project: "{{ project }}"
             playbook: "playbooks/rh-raw-setup.yml"
             job_tags: user-setup
@@ -137,6 +138,7 @@
             job_type: "run"
             organization: "Default"
             inventory: "{{ inventory }}"
+            limit: foreman_virthosts
             project: "{{ project }}"
             playbook: "playbooks/ssh-hardening.yml"
             credentials:
@@ -150,6 +152,7 @@
             job_type: "run"
             organization: "Default"
             inventory: "{{ inventory }}"
+            limit: foreman_virthosts
             project: "{{ project }}"
             playbook: "playbooks/satellite-register.yml"
             credentials:
@@ -159,8 +162,8 @@
             extra_vars:
               katello_rpm_url: "{{ sat_katello_rpm }}"
               satellite_hostname: "{{ sat_url }}"
-              activationkey: "{{ sat_activation_key }}"
-              org_id: "{{ sat_org_id }}"
+              satellite_activation_key: "{{ sat_activation_key }}"
+              satellite_org_id: "{{ sat_org_id }}"
 
 
         - name: Create Deploy HTTPD job template
@@ -171,7 +174,7 @@
             inventory: "{{ inventory }}"
             project: "{{ project }}"
             playbook: "playbooks/rh-deploy-httpd-role.yml"
-            limit: web
+            limit: foreman_virthosts_web
             credentials:
               - "{{ machine_key_creds }}"
             state: present
@@ -185,7 +188,7 @@
             inventory: "{{ inventory }}"
             project: "{{ project }}"
             playbook: "playbooks/rh-install-mssql.yml"
-            limit: db
+            limit: foreman_virthosts_db
             extra_vars:
               mssql_db_password: "{{ mssql_password }}"
             credentials:
@@ -220,26 +223,16 @@
             state: present
             unified_job_template: "04 Deploy HTTPD"
 
-        - name: SSH Hardening Node
+        - name: 03 Attach to Satellite
           tower_workflow_job_template_node:
-            identifier: ssh-hardening
+            identifier: sat-attach
             workflow: "00 RHEL Pipeline"
             organization: "Default"
             state: present
-            unified_job_template: "02 SSH Hardening"
+            unified_job_template: "03 Attach to Satellite"
             success_nodes:
               - httpd-install
               - mssql-install   
-
-        - name: Project update node
-          tower_workflow_job_template_node:
-            identifier: project-update
-            workflow: "00 RHEL Pipeline"
-            organization: "Default"
-            state: present
-            unified_job_template: "{{ project }}"
-            success_nodes:
-              - ssh-hardening
         
       tags:
         - workflow
