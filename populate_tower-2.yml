@@ -93,6 +93,8 @@
             name: "{{ inventory }}"
             organization: "Default"
             state: present
+            variables:
+              ansible_host: '{{"{{ foreman_ip }}"}}'
 
         - name: check inventory source from Satellite
           tower_inventory_source:
@@ -141,6 +143,25 @@
               - "{{ machine_key_creds }}"
             state: present
             become_enabled: yes
+
+        - name: Create Attach to Satellite job template
+          tower_job_template:
+            name: "03 Attach to Satellite"
+            job_type: "run"
+            organization: "Default"
+            inventory: "{{ inventory }}"
+            project: "{{ project }}"
+            playbook: "playbooks/satellite-register.yml"
+            credentials:
+              - "{{ machine_key_creds }}"
+            state: present
+            become_enabled: yes
+            extra_vars:
+              katello_rpm_url: "{{ sat_katello_rpm }}"
+              satellite_hostname: "{{ sat_url }}"
+              activationkey: "{{ sat_activation_key }}"
+              org_id: "{{ sat_org_id }}"
+
 
         - name: Create Deploy HTTPD job template
           tower_job_template:

@@ -9,16 +9,8 @@
   vars_files:
     - files/vars.yml
     - files/users.yml
-
   vars:
-      my_project: "Tower Demos"
-      my_inventory_project: "Git Inventory Project"
-      my_machine_creds: "RHEL Password"
-      my_machine_key_creds: "RHEL SSH"
-      my_inventory: "Git Inventory"
-      my_subscription_creds: "Subscription Creds"
-      my_git_creds: "GitHub SSH"
-      #change between demos
+    inventory: "Satellite"
 
   tasks:
 
@@ -37,22 +29,21 @@
       loop:
         - "01 RHEL Raw Setup"
         - "02 SSH Hardening"
-        - "03 Attach RHEL"
+        - "03 Attach to Satellite"
         - "04 Deploy HTTPD"
         - "05 Deploy MSSQL"
-        - "06 Detach RHEL"
 
   # delete inventory
     - name: Remove main inventory
       tower_inventory:
-        name: "{{ my_inventory }}"
+        name: "{{ inventory }}"
         organization: "Default"
         state: absent
 
   # delete projects
     - name: Remove main project
       tower_project:
-        name: "{{ my_project }}"
+        name: "{{ project }}"
         organization: "Default"
         state: absent
 
@@ -64,7 +55,10 @@
         credential_type: "{{ item.type }}"
         state: absent
       loop:
-        - "{ name: '', type: '' }"
+        - { name: "{{ git_creds }}", type: 'Source Control' }
+        - { name: "{{ satellite_creds }}", type: 'Red Hat Satellite 6' }
+        - { name: "{{ machine_creds }}", type: 'Machine' }
+        - { name: "{{ machine_key_creds }}", type: 'Machine' }
  
   # delete users and teams
     - name: Remove users

@@ -21,3 +21,6 @@ subscription_creds: "Subscription Creds"
 # sat_url:
 # sat_username:
 # sat_password:
+# sat_activation_key:
+# sat_org_id:
+# sat_katello_rpm:
