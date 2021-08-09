@@ -1,0 +1,9 @@
+#!/bin/bash
+echo "Username: "
+read username
+echo "Password: "
+read password
+export TOWER_HOST=https://tower.example.com \
+TOWER_VERIFY_SSL=false
+
+$(TOWER_USERNAME=$username TOWER_PASSWORD=$password awx login -f human)
