@@ -1,0 +1,275 @@
+---
+- name: Populate Tower Objects
+  hosts: localhost
+  gather_facts: false
+
+  collections:
+    - ansible.controller
+
+  vars_files:
+    - files/vars.yml
+    - files/vault.yml
+    - files/users.yml
+  
+  vars:
+    inventory: "Satellite"
+   
+  tasks:
+  # Credentials Setup
+    - name: Credentials Setup
+      block:
+        - name: Add Git Credentials
+          credential:
+            name: "{{ git_creds }}"
+            description: SSH Key for Git access
+            organization: "Default"
+            state: present
+            credential_type: "Source Control"
+            inputs:
+              username: git
+              ssh_key_data: "{{ tower_key }}"
+        
+        - name: Add Satellite Credentials
+          credential:
+            name: "{{ satellite_creds }}"
+            description: "Satellite Login Credentials"
+            organization: "Default"
+            state: present
+            credential_type: "Red Hat Satellite 6"
+            inputs:
+              host: "{{ sat_url }}"
+              username: "{{ sat_username }}"
+              password: "{{ sat_password }}"
+
+        - name: Add RHEL Password
+          credential:
+            name: "{{ machine_creds }}"
+            description: Password for RHEL host access
+            organization: "Default"
+            state: present
+            credential_type: "Machine"
+            inputs:
+              username: "{{ machine_default_user }}"
+              password: "{{ machine_default_password }}" 
+              become_password: "{{ machine_default_password }}"
+        
+        - name: Add RHEL SSH Key
+          credential:
+            name: "{{ machine_key_creds }}"
+            description: SSH Key for RHEL host access
+            organization: "Default"
+            state: present
+            credential_type: "Machine"
+            inputs:
+              username: ansible
+              ssh_key_data: "{{ tower_key }}"
+      tags:
+        - creds
+
+  # Projects Setup  
+    - name: Check Projects
+      block:
+        - name: check main project
+          project:
+            name: "{{ project }}"
+            organization: "Default"
+            state: present
+            scm_type: git
+            scm_credential: "{{ git_creds }}"
+            scm_url: "{{ scm_demo_url }}"
+            scm_clean: yes
+            scm_delete_on_update: yes
+            scm_update_on_launch: yes
+            scm_update_cache_timeout: 0
+
+      tags:
+        - projects
+
+  # Inventory Setup
+    - name: Check Inventory
+      block:
+        - name: check main inventory
+          inventory:
+            name: "{{ inventory }}"
+            organization: "Default"
+            state: present
+            variables:
+              ansible_host: '{{"{{ foreman_ip }}"}}'
+
+        - name: check inventory source from Satellite
+          inventory_source:
+              name: "Satellite Source"
+              inventory: "{{ inventory }}"
+              source: satellite6
+              credential: "{{ satellite_creds }}"
+              update_on_launch: yes
+              overwrite: yes
+              overwrite_vars: yes
+              state: present
+
+      tags:
+        - inventory
+
+  # Job Templates Setup
+    - name: Job Template Setup
+      block:
+        - name: Create RHEL8 Raw Setup job template
+          job_template:
+            name: "01 RHEL Raw Setup"
+            job_type: "run"
+            organization: "Default"
+            inventory: "{{ inventory }}"
+            limit: foreman_virthosts
+            project: "{{ project }}"
+            playbook: "playbooks/rh-raw-setup.yml"
+            job_tags: user-setup
+            extra_vars:
+              python_version: python36
+              ansible_username: ansible
+              ssh_pub_key: "{{ tower_pubkey }}"
+            credentials:
+              - "{{ machine_creds }}"
+            state: present
+            become_enabled: yes
+
+        - name: Create SSH Hardening job template
+          job_template:
+            name: "02 SSH Hardening"
+            job_type: "run"
+            organization: "Default"
+            inventory: "{{ inventory }}"
+            limit: foreman_virthosts
+            project: "{{ project }}"
+            playbook: "playbooks/ssh-hardening.yml"
+            credentials:
+              - "{{ machine_key_creds }}"
+            state: present
+            become_enabled: yes
+
+        - name: Create Attach to Satellite job template
+          job_template:
+            name: "03 Attach to Satellite"
+            job_type: "run"
+            organization: "Default"
+            inventory: "{{ inventory }}"
+            limit: foreman_virthosts
+            project: "{{ project }}"
+            playbook: "playbooks/satellite-register.yml"
+            credentials:
+              - "{{ machine_key_creds }}"
+            state: present
+            become_enabled: yes
+            extra_vars:
+              katello_rpm_url: "{{ sat_katello_rpm }}"
+              satellite_hostname: "{{ sat_url }}"
+              satellite_activation_key: "{{ sat_activation_key }}"
+              satellite_org_id: "{{ sat_org_id }}"
+
+
+        - name: Create Deploy HTTPD job template
+          job_template:
+            name: "04 Deploy HTTPD"
+            job_type: "run"
+            organization: "Default"
+            inventory: "{{ inventory }}"
+            project: "{{ project }}"
+            playbook: "playbooks/rh-deploy-httpd-role.yml"
+            limit: foreman_virthosts_web
+            credentials:
+              - "{{ machine_key_creds }}"
+            state: present
+            become_enabled: yes
+
+        - name: Create Install MSSQL job template
+          job_template:
+            name: "05 Deploy MSSQL"
+            job_type: "run"
+            organization: "Default"
+            inventory: "{{ inventory }}"
+            project: "{{ project }}"
+            playbook: "playbooks/rh-install-mssql.yml"
+            limit: foreman_virthosts_db
+            extra_vars:
+              mssql_db_password: "{{ mssql_password }}"
+            credentials:
+              - "{{ machine_key_creds }}"
+            state: present
+            become_enabled: yes
+      
+      tags: jobs        
+
+  # Workflow setup
+    - name: Check Workflow
+      block:
+        - name: check workflow
+          workflow_job_template:
+            name: "00 RHEL Pipeline"
+            organization: "Default"
+            state: present
+
+        - name: MSSQL Node
+          workflow_job_template_node:
+            identifier: mssql-install
+            workflow: "00 RHEL Pipeline"
+            organization: "Default"
+            state: present
+            unified_job_template: "05 Deploy MSSQL"
+
+        - name: HTTPD Node
+          workflow_job_template_node:
+            identifier: httpd-install
+            workflow: "00 RHEL Pipeline"
+            organization: "Default"
+            state: present
+            unified_job_template: "04 Deploy HTTPD"
+
+        - name: 03 Attach to Satellite
+          workflow_job_template_node:
+            identifier: sat-attach
+            workflow: "00 RHEL Pipeline"
+            organization: "Default"
+            state: present
+            unified_job_template: "03 Attach to Satellite"
+            success_nodes:
+              - httpd-install
+              - mssql-install   
+        
+      tags:
+        - workflow
+
+  # RBAC setup
+    - name: Set up Teams and Users
+      block: 
+
+        - name: Create Jr Ops team
+          team:
+            name: "Jr Ops"
+            description: "Junior Operations"
+            organization: "Default"
+            state: present
+        
+        - name: Create users
+          user:
+            username: "{{ item.username }}"
+            password: "{{ item.password }}"
+            email: "{{ item.email }}"
+            first_name: "{{ item.firstname }}"
+            last_name: "{{ item.lastname }}"
+            state: present
+          loop: "{{ users }}"
+        
+        - name: Add users to "Jr Ops"
+          role:
+            role: member
+            user: "{{ item.username }}"
+            target_team: "Jr Ops"
+          loop: "{{ users }}"
+        
+        - name: Add team to org role execute
+          role:
+            role: execute
+            organization: "Default"
+            team: "Jr Ops"
+      
+      tags:
+        - rbac

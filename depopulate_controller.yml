@@ -1,0 +1,76 @@
+---
+- name: Depopulate Tower Objects
+  hosts: localhost
+  gather_facts: false
+
+  collections:
+    - ansible.controller
+
+  vars_files:
+    - files/vars.yml
+    - files/users.yml
+  vars:
+    inventory: "Satellite"
+
+  tasks:
+
+  # delete workflow
+    - name: Remove workflow template
+      workflow_job_template:
+        name: "00 RHEL Pipeline"
+        organization: "Default"
+        state: absent
+
+  # delete job templates
+    - name: Remove job templates
+      job_template:
+        name: "{{ item }}"
+        state: absent
+      loop:
+        - "01 RHEL Raw Setup"
+        - "02 SSH Hardening"
+        - "03 Attach to Satellite"
+        - "04 Deploy HTTPD"
+        - "05 Deploy MSSQL"
+
+  # delete inventory
+    - name: Remove main inventory
+      inventory:
+        name: "{{ inventory }}"
+        organization: "Default"
+        state: absent
+
+  # delete projects
+    - name: Remove main project
+      project:
+        name: "{{ project }}"
+        organization: "Default"
+        state: absent
+
+  # delete credentials
+    - name: Remove credentials
+      credential:  
+        name: "{{ item.name }}"
+        organization: "Default"
+        credential_type: "{{ item.type }}"
+        state: absent
+      loop:
+        - { name: "{{ git_creds }}", type: 'Source Control' }
+        - { name: "{{ satellite_creds }}", type: 'Red Hat Satellite 6' }
+        - { name: "{{ machine_creds }}", type: 'Machine' }
+        - { name: "{{ machine_key_creds }}", type: 'Machine' }
+ 
+  # delete users and teams
+    - name: Remove users
+      user:
+        username: "{{ item.username }}"
+        state: absent
+      loop: "{{ users }}"
+
+    - name: Remove Jr Ops team
+      team:
+        name: "Jr Ops"
+        description: "Junior Operations"
+        organization: "Default"
+        state: absent
+    
